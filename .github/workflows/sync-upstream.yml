@@ -1,0 +1,156 @@
+name: Sync upstream
+
+# Rebases for-coner onto anomalyco/rune dev once a day. dev mirrors upstream; for-coner carries the
+# Coner patches on top. A conflict rerere has not seen opens an issue and pushes nothing, so
+# for-coner stays at its last good commit. Every pushed for-coner commit gets a coner-* tag so a
+# rev pinned in Coner survives the next force push.
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-upstream
+  cancel-in-progress: false
+
+env:
+  UPSTREAM: https://github.com/anomalyco/rune.git
+  PATCH_BRANCH: for-coner
+  MIRROR_BRANCH: dev
+  RERERE_BRANCH: rerere-cache
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.PATCH_BRANCH }}
+          fetch-depth: 0
+          token: ${{ secrets.SYNC_TOKEN }}
+
+      - name: Fetch upstream
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config rerere.enabled true
+          git config rerere.autoupdate true
+          git remote add upstream "$UPSTREAM"
+          git fetch --no-tags upstream "$MIRROR_BRANCH"
+
+      - name: Restore rerere cache
+        run: |
+          if git fetch origin "$RERERE_BRANCH" 2>/dev/null; then
+            mkdir -p .git/rr-cache
+            git archive FETCH_HEAD | tar -x -C .git/rr-cache
+          fi
+
+      - name: Update the dev mirror
+        run: git push origin "upstream/$MIRROR_BRANCH:refs/heads/$MIRROR_BRANCH"
+
+      - name: Rebase
+        id: rebase
+        run: |
+          before=$(git rev-parse HEAD)
+          base=$(git merge-base HEAD "upstream/$MIRROR_BRANCH")
+          if [ "$base" = "$(git rev-parse "upstream/$MIRROR_BRANCH")" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "for-coner already sits on upstream ${base:0:9}." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if git rebase "upstream/$MIRROR_BRANCH"; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # rerere may have resolved every hunk; continue while it leaves nothing unmerged.
+          while [ -d .git/rebase-merge ] || [ -d .git/rebase-apply ]; do
+            if [ -n "$(git diff --name-only --diff-filter=U)" ]; then
+              {
+                echo "files<<EOF"
+                git diff --name-only --diff-filter=U
+                echo "EOF"
+                echo "commit=$(git rev-parse --short REBASE_HEAD 2>/dev/null || echo unknown)"
+              } >> "$GITHUB_OUTPUT"
+              git rebase --abort
+              git reset --hard "$before"
+              echo "conflict=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            GIT_EDITOR=true git rebase --continue || true
+          done
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - uses: dtolnay/rust-toolchain@master
+        if: steps.rebase.outputs.changed == 'true'
+        with:
+          toolchain: "1.99.1"
+
+      - name: Install Linux build dependencies
+        if: steps.rebase.outputs.changed == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libdbus-1-dev libxkbcommon-dev libwayland-dev libasound2-dev libudev-dev
+
+      - uses: Swatinem/rust-cache@v2
+        if: steps.rebase.outputs.changed == 'true'
+
+      - name: Check
+        id: check
+        if: steps.rebase.outputs.changed == 'true'
+        run: cargo check -p rune --features hot
+
+      - name: Push for-coner and tag it
+        if: steps.rebase.outputs.changed == 'true' && steps.check.outcome == 'success'
+        run: |
+          tag="coner-$(date -u +%Y%m%d)-$(git rev-parse --short=9 HEAD)"
+          git tag "$tag"
+          git push --force-with-lease origin "HEAD:refs/heads/$PATCH_BRANCH"
+          git push origin "refs/tags/$tag"
+          echo "Pushed $(git rev-parse HEAD) as $tag." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Save rerere cache
+        if: always() && steps.rebase.outputs.changed == 'true'
+        run: |
+          [ -d .git/rr-cache ] && [ -n "$(ls -A .git/rr-cache)" ] || exit 0
+          work=$(mktemp -d)
+          cp -r .git/rr-cache/. "$work"
+          cd "$work"
+          git init -q
+          git checkout -q -b "$RERERE_BRANCH"
+          git add -A
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "rerere cache $(date -u +%F)"
+          git push -f "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/$RERERE_BRANCH"
+        env:
+          TOKEN: ${{ secrets.SYNC_TOKEN }}
+
+      - name: Report a conflict or failed check
+        if: steps.rebase.outputs.conflict == 'true' || steps.check.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_TOKEN }}
+          FILES: ${{ steps.rebase.outputs.files }}
+          COMMIT: ${{ steps.rebase.outputs.commit }}
+          CONFLICT: ${{ steps.rebase.outputs.conflict }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ "$CONFLICT" = true ]; then
+            title="Upstream sync: rebase conflict in $COMMIT"
+            body=$(printf 'Rebasing `%s` onto upstream `%s` stopped at `%s`.\n\nUnmerged files:\n\n```\n%s\n```\n\nResolve locally:\n\n```\ngit fetch upstream dev\ngit rebase upstream/dev %s\n# resolve, then\ngit push --force-with-lease origin %s\n```\n\n%s' \
+              "$PATCH_BRANCH" "$MIRROR_BRANCH" "$COMMIT" "$FILES" "$PATCH_BRANCH" "$PATCH_BRANCH" "$RUN_URL")
+          else
+            title="Upstream sync: cargo check failed after rebase"
+            body=$(printf 'The rebase onto upstream `%s` applied cleanly, but `cargo check -p rune --features hot` failed, so nothing was pushed.\n\n%s' \
+              "$MIRROR_BRANCH" "$RUN_URL")
+          fi
+          existing=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --label upstream-sync --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" -R "$GITHUB_REPOSITORY" --body "$title"$'\n\n'"$body"
+          else
+            gh label create upstream-sync -R "$GITHUB_REPOSITORY" --color B60205 --force >/dev/null
+            gh issue create -R "$GITHUB_REPOSITORY" --title "$title" --label upstream-sync --body "$body"
+          fi
+          exit 1
