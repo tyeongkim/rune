@@ -188,6 +188,8 @@ pub(crate) struct Node {
     pub(super) epoch: u32,
     #[cfg(debug_assertions)]
     pub(super) key_source: Option<&'static std::panic::Location<'static>>,
+    #[cfg(debug_assertions)]
+    pub(super) built_source: Option<&'static std::panic::Location<'static>>,
 }
 
 impl std::ops::Deref for Node {
@@ -271,6 +273,8 @@ impl Node {
             epoch: 0,
             #[cfg(debug_assertions)]
             key_source: None,
+            #[cfg(debug_assertions)]
+            built_source: None,
         }
     }
 
