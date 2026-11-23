@@ -158,6 +158,7 @@ impl std::fmt::Debug for Grid {
 /// `cell_w` points wide from the element's left edge. Size the element like any box; rows past its
 /// height are clipped by it as any content is. Accessibility reads it as a terminal with a
 /// text line per row, each ending in a line break unless it [wraps](GridRow::wraps) on.
+#[cfg_attr(debug_assertions, track_caller)]
 pub fn grid(cols: u16, cell_w: f32, cell_h: f32, rows: Vec<Rc<GridRow>>) -> El {
     let mut e = base(FlexDirection::Row);
     e.vis.cold_mut().grid = Some(Rc::new(Grid { cols, cell: [cell_w, cell_h], rows, caret: None }));
