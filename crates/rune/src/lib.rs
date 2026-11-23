@@ -400,6 +400,7 @@ pub use rune_motion::Velocity;
 pub use rune_spell as spell;
 pub use runtime::Cx;
 pub use runtime::ElementInfo;
+pub use runtime::ElementSource;
 pub use runtime::Env;
 pub use runtime::HelpLook;
 pub use runtime::ImageMenu;

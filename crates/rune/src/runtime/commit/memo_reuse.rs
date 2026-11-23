@@ -485,6 +485,8 @@ pub(in crate::runtime) fn same_root_el(el: &El, built: &crate::memo::Built, expa
         vis_flags,
         #[cfg(debug_assertions)]
         key_source: _,
+        #[cfg(debug_assertions)]
+        built_source: _,
     } = base;
     // Flags flattening handles itself, or that only describe the children.
     let ignored = crate::el::ElFlags::HAS_VIRTUAL | crate::el::ElFlags::MEMO_EXTENDED | crate::el::ElFlags::VIRTUAL_MOUNT;
