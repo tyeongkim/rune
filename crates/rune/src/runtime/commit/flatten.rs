@@ -824,7 +824,7 @@ fn flatten_node<E: FlattenEl>(
         0
     };
     #[cfg(debug_assertions)]
-    let key_source = el_r.key_source;
+    let (key_source, built_source) = (el_r.key_source, el_r.built_source);
     let (key, mut handlers, mut text, vis, cold, style, children) = el.finish(s);
     if selection_off { crate::el::apply_selection_off(&mut text, &mut handlers); }
     let extra_children = if let Some(bind) = on_path {
@@ -868,6 +868,8 @@ fn flatten_node<E: FlattenEl>(
         epoch: crate::runtime::paint_keep::next_epoch(),
         #[cfg(debug_assertions)]
         key_source,
+        #[cfg(debug_assertions)]
+        built_source,
     });
     if nodes[me].focus.caret_browsing
         && !nodes[me].focus.opt_out

@@ -202,6 +202,7 @@ use anchor::{anchor_ancestors, anchor_index, anchor_index_live, step_up};
 pub use cx::{Cx, Env, Waker, commit_generation};
 pub(crate) use cx::caret_of;
 use cx::COMMITS;
+pub use element_source::ElementSource;
 pub use elements::{ElementInfo, MatchedHandover, Pose, ResolvedTextStyle};
 pub use pick::{Pick, Picked};
 #[cfg(debug_assertions)]

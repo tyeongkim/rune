@@ -232,6 +232,7 @@ impl std::fmt::Debug for InputSpec {
 /// [`El::on_submit`], or pressing the [`El::default_button`] when none is set) while Shift+Return
 /// and Option+Return insert a line break; a document editor that wants plain Return to break
 /// paragraphs attaches `.on_submit(|s, _| s.field.insert("\n"))`.
+#[cfg_attr(debug_assertions, track_caller)]
 pub fn text_input(edit: &TextEdit, style: TextStyle) -> El {
     let model_flags = InputModelFlags::of(edit);
     // An app may have assigned `edit.text` directly: clamp stale marks, blocks and caret to it.

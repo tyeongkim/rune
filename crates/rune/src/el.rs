@@ -97,10 +97,12 @@ pub(crate) use visuals::{GradientGeometry, RadialGradient};
 pub use visuals::{Outline, RadialRadius, Shadow};
 
 /// An effect slot (`El::effect`): size it like any box.
+#[cfg_attr(debug_assertions, track_caller)]
 pub fn effect(mark: u32) -> El {
     base(FlexDirection::Row).effect(mark)
 }
 
+#[cfg_attr(debug_assertions, track_caller)]
 pub fn text(content: impl Into<String>) -> El {
     let mut e = base(FlexDirection::Row);
     e.role = RoleTag::TEXT;
@@ -385,6 +387,8 @@ pub struct El {
     pub(crate) vis_flags: VisualFlags,
     #[cfg(debug_assertions)]
     pub(crate) key_source: Option<&'static std::panic::Location<'static>>,
+    #[cfg(debug_assertions)]
+    pub(crate) built_source: Option<&'static std::panic::Location<'static>>,
 }
 
 #[cfg(all(target_pointer_width = "64", not(debug_assertions)))]
@@ -395,6 +399,7 @@ const _: () = assert!(std::mem::size_of::<Option<El>>() == 192);
 const _: () = assert!(std::mem::size_of::<Visual>() == 40);
 
 #[inline]
+#[cfg_attr(debug_assertions, track_caller)]
 fn base(dir: FlexDirection) -> El {
     El {
         // Relative makes every element the containing block for its absolute children, so they
@@ -414,27 +419,33 @@ fn base(dir: FlexDirection) -> El {
         vis_flags: VisualFlags::default(),
         #[cfg(debug_assertions)]
         key_source: None,
+        #[cfg(debug_assertions)]
+        built_source: Some(std::panic::Location::caller()),
     }
 }
 
 #[inline]
+#[cfg_attr(debug_assertions, track_caller)]
 pub fn row() -> El {
     base(FlexDirection::Row)
 }
 
 #[inline]
+#[cfg_attr(debug_assertions, track_caller)]
 pub fn col() -> El {
     base(FlexDirection::Column)
 }
 
 /// A plain box.
 #[inline]
+#[cfg_attr(debug_assertions, track_caller)]
 pub fn el() -> El {
     base(FlexDirection::Row)
 }
 
 /// Takes the free space along its parent's main axis.
 #[inline]
+#[cfg_attr(debug_assertions, track_caller)]
 pub fn spacer() -> El {
     base(FlexDirection::Row).grow(1.0)
 }
@@ -442,6 +453,7 @@ pub fn spacer() -> El {
 /// A 1 pt horizontal divider scaled vertically by half at paint time (`height: 1px; transform:
 /// scaleY(0.5)`), matching Chromium's sub-pixel hairline coverage at 1x, 1.5x and 2x while taking
 /// 1 pt of layout height.
+#[cfg_attr(debug_assertions, track_caller)]
 pub fn hairline(c: Color) -> El {
     el().h(1.0).fill(c).hairline()
 }
@@ -452,11 +464,13 @@ pub fn hairline(c: Color) -> El {
 /// 0.8 at 1.25x and 0.667 at 1.5x, where `el().h(0.5)` takes 0.5 at every scale, and a list of
 /// rows split by Desktop's `border-bottom: 0.5px` ends where Chromium's does. It stretches
 /// across its column; give it `w_full` or margins as a `<div>` takes them.
+#[cfg_attr(debug_assertions, track_caller)]
 pub fn rule(width: f32, c: Color) -> El {
     base(FlexDirection::Row).border_sides([width, 0.0, 0.0, 0.0], c).border_layout()
 }
 
 /// Text with styled byte ranges; wraps at its width.
+#[cfg_attr(debug_assertions, track_caller)]
 pub fn rich(content: impl Into<String>, spans: Vec<Span>) -> El {
     let mut e = text(content);
     if let Some(t) = &mut e.text {
@@ -472,6 +486,7 @@ pub fn rich(content: impl Into<String>, spans: Vec<Span>) -> El {
 
 /// An SVG icon from a catalog, `size` points square (or what [`crate::text::set_icon_swap_size`]
 /// gives a swapped icon), tinted with `.color()`.
+#[cfg_attr(debug_assertions, track_caller)]
 pub fn icon(i: &'static Icon, size: f32) -> El {
     let size = crate::text::icon::swapped_size(i, size);
     let mut e = base(FlexDirection::Row).size(size, size);
@@ -481,6 +496,7 @@ pub fn icon(i: &'static Icon, size: f32) -> El {
 }
 
 /// An element that paints `shape`; size it like any element.
+#[cfg_attr(debug_assertions, track_caller)]
 pub fn canvas(shape: Shape) -> El {
     let mut e = base(FlexDirection::Row).shape(shape);
     e.role = RoleTag::IMAGE;
