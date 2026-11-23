@@ -66,6 +66,7 @@ mod api;
 mod commit;
 mod cx;
 mod drag_out_host;
+mod element_source;
 mod elements;
 pub(crate) mod event_log;
 mod font_families;

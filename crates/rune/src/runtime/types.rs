@@ -186,6 +186,8 @@ pub(crate) struct Node {
     /// A new one each time it's built from its element; a node a region keeps keeps it
     /// (`paint_keep`).
     pub(super) epoch: u32,
+    #[cfg(debug_assertions)]
+    pub(super) key_source: Option<&'static std::panic::Location<'static>>,
 }
 
 impl std::ops::Deref for Node {
@@ -267,6 +269,8 @@ impl Node {
             collapsing: false,
             moved_stub: true,
             epoch: 0,
+            #[cfg(debug_assertions)]
+            key_source: None,
         }
     }
 
